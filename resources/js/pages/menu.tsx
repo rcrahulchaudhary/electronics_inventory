@@ -2,7 +2,7 @@ import { Head, Link } from '@inertiajs/react';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/hooks/use-auth';
 import PosShell from '@/components/pos-shell';
-import { Store, Tag, Award, Package, ClipboardList, Settings, ChevronRight } from 'lucide-react';
+import { Store, Tag, Award, Package, ClipboardList, Settings, ChevronRight, Users } from 'lucide-react';
 
 type MenuCard = {
     href: string;
@@ -28,6 +28,16 @@ export default function Menu() {
             color: 'text-emerald-400',
             bgColor: 'bg-emerald-500/10',
             borderColor: 'border-emerald-500/20 hover:border-emerald-500/50',
+            superadminOnly: true,
+        },
+        {
+            href: '/users',
+            icon: Users,
+            label: t('menu.userManagement'),
+            description: t('menu.userManagementDesc'),
+            color: 'text-rose-400',
+            bgColor: 'bg-rose-500/10',
+            borderColor: 'border-rose-500/20 hover:border-rose-500/50',
             superadminOnly: true,
         },
         {

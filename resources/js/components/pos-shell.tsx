@@ -3,7 +3,7 @@ import { type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
     ArrowLeft, Home, Menu, Power, ShoppingCart, Warehouse, Wrench,
-    Store, Tag, Award, Package, ClipboardList, Settings, Sun, Moon,
+    Store, Tag, Award, Package, ClipboardList, Settings, Sun, Moon, Users,
 } from 'lucide-react';
 import LanguageSwitcher from '@/components/language-switcher';
 import { logout } from '@/routes';
@@ -31,6 +31,7 @@ const NAV_ITEMS = (t: (k: string) => string) => [
 const MENU_SUB_ITEMS = (t: (k: string) => string, isSuperadmin: boolean) =>
     [
         { href: '/outlets',         icon: Store,         label: () => t('menu.outletManagement'),  superadminOnly: true },
+        { href: '/users',           icon: Users,         label: () => t('menu.userManagement'),    superadminOnly: true },
         { href: '/categories',      icon: Tag,           label: () => t('menu.categoryManagement') },
         { href: '/brands',          icon: Award,         label: () => t('menu.brandManagement') },
         { href: '/products',        icon: Package,       label: () => t('menu.productManagement') },
