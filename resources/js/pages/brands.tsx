@@ -5,6 +5,7 @@ import { Award, CheckCircle2, AlertCircle, Pencil, Search, Trash2, X } from 'luc
 import PosShell from '@/components/pos-shell';
 import Pagination from '@/components/pagination';
 import { usePagination } from '@/hooks/use-pagination';
+import { useAuth } from '@/hooks/use-auth';
 import * as brandsRoute from '@/routes/brands';
 
 type Brand = {
@@ -36,6 +37,7 @@ const inputCls = 'w-full rounded-2xl border border-slate-800 bg-slate-950 px-3.5
 
 export default function Brands({ brands, flash }: Props) {
     const { t } = useTranslation();
+    const { isSuperadmin } = useAuth();
     const [editingBrand, setEditingBrand] = useState<Brand | null>(null);
     const [search, setSearch] = useState('');
 
@@ -136,21 +138,23 @@ export default function Brands({ brands, flash }: Props) {
                                     }`}>
                                         {brand.is_active ? t('brandMgmt.active') : t('brandMgmt.inactive')}
                                     </span>
-                                    <div className="flex gap-1.5">
-                                        <button
-                                            onClick={() => openEdit(brand)}
-                                            className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-700 bg-slate-800/50 text-slate-400 transition-all hover:border-indigo-500/30 hover:text-indigo-400"
-                                        >
-                                            <Pencil className="h-3.5 w-3.5" />
-                                        </button>
-                                        <button
-                                            onClick={() => handleDelete(brand.id)}
-                                            disabled={deleteForm.processing}
-                                            className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-700 bg-slate-800/50 text-slate-400 transition-all hover:border-rose-500/30 hover:text-rose-400 disabled:opacity-50"
-                                        >
-                                            <Trash2 className="h-3.5 w-3.5" />
-                                        </button>
-                                    </div>
+                                    {isSuperadmin && (
+                                        <div className="flex gap-1.5">
+                                            <button
+                                                onClick={() => openEdit(brand)}
+                                                className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-700 bg-slate-800/50 text-slate-400 transition-all hover:border-indigo-500/30 hover:text-indigo-400"
+                                            >
+                                                <Pencil className="h-3.5 w-3.5" />
+                                            </button>
+                                            <button
+                                                onClick={() => handleDelete(brand.id)}
+                                                disabled={deleteForm.processing}
+                                                className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-700 bg-slate-800/50 text-slate-400 transition-all hover:border-rose-500/30 hover:text-rose-400 disabled:opacity-50"
+                                            >
+                                                <Trash2 className="h-3.5 w-3.5" />
+                                            </button>
+                                        </div>
+                                    )}
                                 </div>
                             ))}
                         </div>

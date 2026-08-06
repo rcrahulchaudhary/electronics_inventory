@@ -39,6 +39,10 @@ class CategoryController extends Controller
 
     public function update(Request $request, Category $category)
     {
+        if (!$request->user()->is_superadmin) {
+            abort(403);
+        }
+
         $data = $request->validate([
             'name'      => 'required|string|max:100|unique:categories,name,' . $category->id,
             'is_active' => 'required|boolean',
@@ -63,8 +67,12 @@ class CategoryController extends Controller
         return redirect()->route('categories.index')->with('success', 'Category updated.');
     }
 
-    public function destroy(Category $category)
+    public function destroy(Request $request, Category $category)
     {
+        if (!$request->user()->is_superadmin) {
+            abort(403);
+        }
+
         if ($category->image) {
             Storage::disk('public')->delete($category->image);
         }

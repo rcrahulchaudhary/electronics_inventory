@@ -5,6 +5,7 @@ import { CheckCircle2, Package, Pencil, Plus, Search, Trash2, Store, X } from 'l
 import { usePagination } from '@/hooks/use-pagination';
 import Pagination from '@/components/pagination';
 import PosShell from '@/components/pos-shell';
+import { useAuth } from '@/hooks/use-auth';
 import { QuickCreateModal } from '@/components/quick-create-modal';
 import * as productsRoute from '@/routes/products';
 import * as brandsRoute from '@/routes/brands';
@@ -50,6 +51,7 @@ type Props = {
     brands: Brand[];
     categories: Category[];
     outlets: Outlet[];
+    outletId: number | null;
     flash?: { success?: string };
 };
 
@@ -195,9 +197,20 @@ function OutletStockEditor({
     );
 }
 
-export default function Products({ products, brands: initialBrands, categories: initialCategories, outlets, flash }: Props) {
+export default function Products({ products, brands: initialBrands, categories: initialCategories, outlets, outletId, flash }: Props) {
     const { t } = useTranslation();
+    const { isSuperadmin, outletId: userOutletId } = useAuth();
     const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+
+    // Outlets a non-superadmin can assign stock to — only their own.
+    const assignableOutlets = useMemo(
+        () => isSuperadmin ? outlets : outlets.filter(o => o.id === userOutletId),
+        [outlets, isSuperadmin, userOutletId]
+    );
+
+    const applyOutlet = (id: number | null) => {
+        router.get('/products', id ? { outlet_id: id } : {}, { preserveState: false });
+    };
 
     // Local brand/category lists — extended when user quick-creates
     const [brands, setBrands]         = useState(initialBrands);
@@ -312,6 +325,22 @@ export default function Products({ products, brands: initialBrands, categories: 
                             className="w-full rounded-2xl border border-slate-800 bg-slate-950 py-2.5 pl-10 pr-3 text-xs text-slate-300 placeholder:text-slate-600 outline-none transition-all focus:border-indigo-500/50 focus:ring-2 focus:ring-indigo-500/20" />
                     </div>
 
+                    {/* Outlet filter — superadmin only: view all stores combined or individually */}
+                    {isSuperadmin && outlets.length > 0 && (
+                        <div className="mb-4 flex flex-wrap gap-1.5">
+                            <button onClick={() => applyOutlet(null)}
+                                className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold transition-all ${!outletId ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/25' : 'border border-slate-800 bg-slate-950 text-slate-400 hover:text-white'}`}>
+                                <Store className="h-3 w-3" /> {t('stockMgmt.allOutlets')}
+                            </button>
+                            {outlets.map(o => (
+                                <button key={o.id} onClick={() => applyOutlet(o.id)}
+                                    className={`rounded-xl px-3 py-1.5 text-xs font-semibold transition-all ${outletId === o.id ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/25' : 'border border-slate-800 bg-slate-950 text-slate-400 hover:text-white'}`}>
+                                    {o.code}
+                                </button>
+                            ))}
+                        </div>
+                    )}
+
                     {total === 0 ? (
                         <div className="flex flex-col items-center justify-center py-16 text-center">
                             <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-800">
@@ -376,13 +405,15 @@ export default function Products({ products, brands: initialBrands, categories: 
                                             >
                                                 <Pencil className="h-3.5 w-3.5" />
                                             </button>
-                                            <button
-                                                onClick={() => handleDelete(product.id)}
-                                                disabled={deleteForm.processing}
-                                                className="flex h-8 w-8 items-center justify-center rounded-xl border border-slate-700 bg-slate-800 text-slate-400 transition-all hover:border-rose-500/50 hover:text-rose-400 disabled:opacity-50"
-                                            >
-                                                <Trash2 className="h-3.5 w-3.5" />
-                                            </button>
+                                            {isSuperadmin && (
+                                                <button
+                                                    onClick={() => handleDelete(product.id)}
+                                                    disabled={deleteForm.processing}
+                                                    className="flex h-8 w-8 items-center justify-center rounded-xl border border-slate-700 bg-slate-800 text-slate-400 transition-all hover:border-rose-500/50 hover:text-rose-400 disabled:opacity-50"
+                                                >
+                                                    <Trash2 className="h-3.5 w-3.5" />
+                                                </button>
+                                            )}
                                         </div>
                                     </div>
                                 </div>
@@ -476,7 +507,7 @@ export default function Products({ products, brands: initialBrands, categories: 
                             <p className="text-xs text-slate-500">{t('productMgmt.outletStockDesc')}</p>
                             {outlets.length === 0
                                 ? <p className="text-xs text-slate-600">{t('productMgmt.noOutlets')}</p>
-                                : <OutletStockEditor outlets={outlets} entries={createForm.data.outlets} onChange={v => createForm.setData('outlets', v)} />
+                                : <OutletStockEditor outlets={assignableOutlets} entries={createForm.data.outlets} onChange={v => createForm.setData('outlets', v)} />
                             }
                         </div>
 
@@ -588,7 +619,7 @@ export default function Products({ products, brands: initialBrands, categories: 
                                 <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-indigo-400">
                                     <Store className="h-3 w-3" /> {t('productMgmt.outletStock')}
                                 </p>
-                                <OutletStockEditor outlets={outlets} entries={editForm.data.outlets} onChange={v => editForm.setData('outlets', v)} />
+                                <OutletStockEditor outlets={assignableOutlets} entries={editForm.data.outlets} onChange={v => editForm.setData('outlets', v)} />
                             </div>
                         </div>
 

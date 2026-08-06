@@ -32,6 +32,10 @@ class BrandController extends Controller
 
     public function update(Request $request, Brand $brand)
     {
+        if (!$request->user()->is_superadmin) {
+            abort(403);
+        }
+
         $data = $request->validate([
             'name'      => 'required|string|max:100|unique:brands,name,' . $brand->id,
             'is_active' => 'required|boolean',
@@ -42,8 +46,12 @@ class BrandController extends Controller
         return redirect()->route('brands.index')->with('success', 'Brand updated.');
     }
 
-    public function destroy(Brand $brand)
+    public function destroy(Request $request, Brand $brand)
     {
+        if (!$request->user()->is_superadmin) {
+            abort(403);
+        }
+
         $brand->delete();
 
         return redirect()->route('brands.index')->with('success', 'Brand deleted.');

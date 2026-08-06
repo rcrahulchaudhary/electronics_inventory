@@ -14,20 +14,31 @@ use Inertia\Inertia;
 
 class ProductController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
+        $user     = $request->user();
+        $outletId = $user->is_superadmin ? ($request->integer('outlet_id') ?: null) : $user->outlet_id;
+
+        $productsQuery = Product::with(['brand:id,name', 'category:id,name', 'outlets:id,name,code'])
+            ->orderBy('name');
+
+        if ($outletId) {
+            $productsQuery->whereHas('outlets', fn ($q) => $q->where('outlets.id', $outletId));
+        }
+
         return Inertia::render('products', [
-            'products'   => Product::with(['brand:id,name', 'category:id,name', 'outlets:id,name,code'])
-                ->orderBy('name')
-                ->get(),
+            'products'   => $productsQuery->get(),
             'brands'     => Brand::where('is_active', true)->orderBy('name')->get(['id', 'name']),
             'categories' => Category::where('is_active', true)->orderBy('name')->get(['id', 'name']),
             'outlets'    => Outlet::orderBy('name')->get(['id', 'name', 'code']),
+            'outletId'   => $outletId,
         ]);
     }
 
     public function store(Request $request)
     {
+        $user = $request->user();
+
         $data = $request->validate([
             'name'         => 'required|string|max:150',
             'model_number' => 'nullable|string|max:100',
@@ -42,9 +53,15 @@ class ProductController extends Controller
             'outlets.*.cost'        => 'required|numeric|min:0',
         ]);
 
+        // Outlet staff can only assign stock to their own outlet, regardless
+        // of what the request contains.
+        $outlets = $user->is_superadmin
+            ? ($data['outlets'] ?? [])
+            : collect($data['outlets'] ?? [])->filter(fn ($o) => (int) $o['id'] === $user->outlet_id)->all();
+
         $imagePath = $request->hasFile('image') ? $request->file('image')->store('product-images', 'public') : null;
 
-        DB::transaction(function () use ($data, $imagePath) {
+        DB::transaction(function () use ($data, $imagePath, $outlets) {
             $product = Product::create([
                 'name'         => $data['name'],
                 'model_number' => $data['model_number'] ?? null,
@@ -55,7 +72,7 @@ class ProductController extends Controller
                 'category_id'  => $data['category_id'],
             ]);
 
-            foreach ($data['outlets'] ?? [] as $outlet) {
+            foreach ($outlets as $outlet) {
                 $product->outlets()->attach($outlet['id'], [
                     'initial_qty' => $outlet['initial_qty'],
                     'cost'        => $outlet['cost'],
@@ -74,6 +91,8 @@ class ProductController extends Controller
 
     public function update(Request $request, Product $product)
     {
+        $user = $request->user();
+
         $data = $request->validate([
             'name'         => 'required|string|max:150',
             'model_number' => 'nullable|string|max:100',
@@ -109,20 +128,38 @@ class ProductController extends Controller
             'is_active'    => $data['is_active'],
         ]);
 
-        $sync = [];
-        foreach ($data['outlets'] ?? [] as $outlet) {
-            $sync[$outlet['id']] = [
-                'initial_qty' => $outlet['initial_qty'],
-                'cost'        => $outlet['cost'],
-            ];
+        if ($user->is_superadmin) {
+            $sync = [];
+            foreach ($data['outlets'] ?? [] as $outlet) {
+                $sync[$outlet['id']] = [
+                    'initial_qty' => $outlet['initial_qty'],
+                    'cost'        => $outlet['cost'],
+                ];
+            }
+            $product->outlets()->sync($sync);
+        } else {
+            // Outlet staff can only touch their own outlet's assignment —
+            // leave every other outlet's pivot row untouched.
+            $own = collect($data['outlets'] ?? [])->firstWhere('id', $user->outlet_id);
+
+            if ($own) {
+                $product->outlets()->syncWithoutDetaching([
+                    $own['id'] => ['initial_qty' => $own['initial_qty'], 'cost' => $own['cost']],
+                ]);
+            } else {
+                $product->outlets()->detach($user->outlet_id);
+            }
         }
-        $product->outlets()->sync($sync);
 
         return redirect()->route('products.index')->with('success', 'Product updated.');
     }
 
-    public function destroy(Product $product)
+    public function destroy(Request $request, Product $product)
     {
+        if (!$request->user()->is_superadmin) {
+            abort(403);
+        }
+
         if ($product->image) {
             Storage::disk('public')->delete($product->image);
         }

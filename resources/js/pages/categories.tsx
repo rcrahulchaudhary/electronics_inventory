@@ -5,6 +5,7 @@ import { Layers, CheckCircle2, AlertCircle, Pencil, Trash2, X, Search } from 'lu
 import { usePagination } from '@/hooks/use-pagination';
 import Pagination from '@/components/pagination';
 import PosShell from '@/components/pos-shell';
+import { useAuth } from '@/hooks/use-auth';
 import * as categoriesRoute from '@/routes/categories';
 
 type Category = {
@@ -92,6 +93,7 @@ function ImageUpload({
 }
 
 export default function Categories({ categories, flash }: Props) {
+    const { isSuperadmin } = useAuth();
     const { t } = useTranslation();
     const [editingCategory, setEditingCategory] = useState<Category | null>(null);
 
@@ -203,21 +205,23 @@ export default function Categories({ categories, flash }: Props) {
                                     }`}>
                                         {category.is_active ? t('categoryMgmt.active') : t('categoryMgmt.inactive')}
                                     </span>
-                                    <div className="flex gap-1.5">
-                                        <button
-                                            onClick={() => openEdit(category)}
-                                            className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-700 bg-slate-800/50 text-slate-400 transition-all hover:border-indigo-500/30 hover:text-indigo-400"
-                                        >
-                                            <Pencil className="h-3.5 w-3.5" />
-                                        </button>
-                                        <button
-                                            onClick={() => handleDelete(category.id)}
-                                            disabled={deleteForm.processing}
-                                            className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-700 bg-slate-800/50 text-slate-400 transition-all hover:border-rose-500/30 hover:text-rose-400 disabled:opacity-50"
-                                        >
-                                            <Trash2 className="h-3.5 w-3.5" />
-                                        </button>
-                                    </div>
+                                    {isSuperadmin && (
+                                        <div className="flex gap-1.5">
+                                            <button
+                                                onClick={() => openEdit(category)}
+                                                className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-700 bg-slate-800/50 text-slate-400 transition-all hover:border-indigo-500/30 hover:text-indigo-400"
+                                            >
+                                                <Pencil className="h-3.5 w-3.5" />
+                                            </button>
+                                            <button
+                                                onClick={() => handleDelete(category.id)}
+                                                disabled={deleteForm.processing}
+                                                className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-700 bg-slate-800/50 text-slate-400 transition-all hover:border-rose-500/30 hover:text-rose-400 disabled:opacity-50"
+                                            >
+                                                <Trash2 className="h-3.5 w-3.5" />
+                                            </button>
+                                        </div>
+                                    )}
                                 </div>
                             ))}
                         </div>

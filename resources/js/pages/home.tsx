@@ -1,10 +1,10 @@
-import { Head, router } from '@inertiajs/react';
+import { Head, Link, router } from '@inertiajs/react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { DayPicker, type DateRange } from 'react-day-picker';
 import {
-    Activity, AlertTriangle, CalendarDays, Package,
-    ShoppingBag, Store, TrendingUp, Wrench, X,
+    Activity, AlertTriangle, CalendarDays, CreditCard, Package,
+    ShoppingBag, Store, Truck, TrendingUp, Wrench, X,
 } from 'lucide-react';
 import { Line, Doughnut } from 'react-chartjs-2';
 import {
@@ -33,6 +33,8 @@ type Props = {
     totalOrders: number;
     ordersByStatus: Record<string, number>;
     ordersByPayment: Record<string, number>;
+    creditCount: number;
+    pendingDeliveryCount: number;
     topProducts: TopProduct[];
     dailySales: DailySale[];
     maintTotal: number;
@@ -219,6 +221,7 @@ export default function Home({
     from, to, outletId, outlets,
     totalRevenue, totalOrders,
     ordersByStatus, ordersByPayment,
+    creditCount, pendingDeliveryCount,
     topProducts, dailySales,
     maintTotal, maintByStatus,
     lowStock, outOfStock,
@@ -351,10 +354,11 @@ export default function Home({
                     )}
                 </div>
 
-                {/* ── Quick stat cards ──────────────────────────────────── */}
-                <div className="grid grid-cols-3 gap-3">
+                {/* ── Quick stat cards — clickable, deep-link into the relevant list ── */}
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-5">
                     {/* Orders */}
-                    <div className="rounded-2xl border border-blue-500/20 bg-blue-500/10 p-3.5">
+                    <Link href="/orders"
+                        className="rounded-2xl border border-blue-500/20 bg-blue-500/10 p-3.5 text-left transition-all hover:border-blue-500/40 hover:bg-blue-500/15 active:scale-[0.98]">
                         <div className="mb-2.5 flex h-7 w-7 items-center justify-center rounded-lg bg-blue-500/20">
                             <ShoppingBag className="h-3.5 w-3.5 text-blue-400" />
                         </div>
@@ -365,10 +369,11 @@ export default function Home({
                         <p className="mt-0.5 text-[10px] text-blue-300/50">
                             {(ordersByStatus['pending'] ?? 0) + (ordersByStatus['confirm'] ?? 0)} pending
                         </p>
-                    </div>
+                    </Link>
 
                     {/* Maintenance */}
-                    <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 p-3.5">
+                    <Link href="/maintenances"
+                        className="rounded-2xl border border-amber-500/20 bg-amber-500/10 p-3.5 text-left transition-all hover:border-amber-500/40 hover:bg-amber-500/15 active:scale-[0.98]">
                         <div className="mb-2.5 flex h-7 w-7 items-center justify-center rounded-lg bg-amber-500/20">
                             <Wrench className="h-3.5 w-3.5 text-amber-400" />
                         </div>
@@ -379,10 +384,11 @@ export default function Home({
                         <p className="mt-0.5 text-[10px] text-amber-300/50">
                             {totalMaintOpen} active
                         </p>
-                    </div>
+                    </Link>
 
-                    {/* Stock */}
-                    <div className="rounded-2xl border border-rose-500/20 bg-rose-500/10 p-3.5">
+                    {/* Out of Stock */}
+                    <Link href="/stocks?filter=outOfStock"
+                        className="rounded-2xl border border-rose-500/20 bg-rose-500/10 p-3.5 text-left transition-all hover:border-rose-500/40 hover:bg-rose-500/15 active:scale-[0.98]">
                         <div className="mb-2.5 flex h-7 w-7 items-center justify-center rounded-lg bg-rose-500/20">
                             <Package className="h-3.5 w-3.5 text-rose-400" />
                         </div>
@@ -393,7 +399,31 @@ export default function Home({
                         <p className="mt-0.5 text-[10px] text-rose-300/50">
                             {lowStock.length} low stock
                         </p>
-                    </div>
+                    </Link>
+
+                    {/* Credits */}
+                    <Link href="/orders?payment_type=credit"
+                        className="rounded-2xl border border-violet-500/20 bg-violet-500/10 p-3.5 text-left transition-all hover:border-violet-500/40 hover:bg-violet-500/15 active:scale-[0.98]">
+                        <div className="mb-2.5 flex h-7 w-7 items-center justify-center rounded-lg bg-violet-500/20">
+                            <CreditCard className="h-3.5 w-3.5 text-violet-400" />
+                        </div>
+                        <p className="text-2xl font-black leading-none text-violet-300 tabular-nums">{creditCount}</p>
+                        <p className="mt-1.5 text-[10px] font-bold uppercase tracking-wide text-violet-400/80">
+                            Credits
+                        </p>
+                    </Link>
+
+                    {/* Pending Delivery */}
+                    <Link href="/orders?status=pending"
+                        className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-3.5 text-left transition-all hover:border-emerald-500/40 hover:bg-emerald-500/15 active:scale-[0.98]">
+                        <div className="mb-2.5 flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-500/20">
+                            <Truck className="h-3.5 w-3.5 text-emerald-400" />
+                        </div>
+                        <p className="text-2xl font-black leading-none text-emerald-300 tabular-nums">{pendingDeliveryCount}</p>
+                        <p className="mt-1.5 text-[10px] font-bold uppercase tracking-wide text-emerald-400/80">
+                            Pending Delivery
+                        </p>
+                    </Link>
                 </div>
 
                 {/* ── Order breakdown ───────────────────────────────────── */}

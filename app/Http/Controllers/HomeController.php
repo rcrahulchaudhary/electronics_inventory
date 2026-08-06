@@ -32,6 +32,8 @@ class HomeController extends Controller
         $totalOrders     = $orders->count();
         $ordersByStatus  = $orders->groupBy('status')->map->count();
         $ordersByPayment = $orders->groupBy('payment_type')->map->count();
+        $creditCount     = $ordersByPayment['credit'] ?? 0;
+        $pendingDeliveryCount = ($ordersByStatus['pending'] ?? 0) + ($ordersByStatus['confirm'] ?? 0);
 
         // Revenue from order_items (price * quantity) joined through orders
         $orderIds     = $orders->pluck('id');
@@ -79,6 +81,8 @@ class HomeController extends Controller
             'totalOrders'    => $totalOrders,
             'ordersByStatus' => $ordersByStatus,
             'ordersByPayment' => $ordersByPayment,
+            'creditCount'    => $creditCount,
+            'pendingDeliveryCount' => $pendingDeliveryCount,
             'topProducts'    => $topProducts,
             'dailySales'     => $dailySales,
             'maintTotal'     => $maintTotal,

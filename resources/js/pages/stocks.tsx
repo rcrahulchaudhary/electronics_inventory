@@ -138,8 +138,12 @@ export default function Stocks({ stocks, allStocks, products, pendingTransfers, 
     const { t } = useTranslation();
     const { isSuperadmin, outletId: userOutletId } = useAuth();
 
+    // Deep-linked from Home's "Out of Stock" card: ?filter=outOfStock
+    const initialParams = useMemo(() => new URLSearchParams(window.location.search), []);
+
     const [search, setSearch]                     = useState('');
     const [outletFilter, setOutletFilter]         = useState('All');
+    const [outOfStockOnly, setOutOfStockOnly]     = useState(() => initialParams.get('filter') === 'outOfStock');
     const [showProductModal, setShowProductModal] = useState(false);
     const [editingStock, setEditingStock]         = useState<StockEntry | null>(null);
     const [editQty, setEditQty]                   = useState('');
@@ -173,15 +177,16 @@ export default function Stocks({ stocks, allStocks, products, pendingTransfers, 
     const filtered = useMemo(() =>
         stocks.filter(s => {
             const matchOutlet = outletFilter === 'All' || s.outlet.code === outletFilter;
+            const matchStockLevel = !outOfStockOnly || Number(s.quantity) <= 0;
             const q = search.toLowerCase();
             const matchSearch = !q ||
                 s.product.name.toLowerCase().includes(q) ||
                 s.product.brand.name.toLowerCase().includes(q) ||
                 s.product.category.name.toLowerCase().includes(q) ||
                 (s.product.model_number ?? '').toLowerCase().includes(q);
-            return matchOutlet && matchSearch;
+            return matchOutlet && matchStockLevel && matchSearch;
         }),
-    [stocks, search, outletFilter]);
+    [stocks, search, outletFilter, outOfStockOnly]);
     const { paged, page, totalPages, total, goTo } = usePagination(filtered, 15);
 
     // ── Add form ──────────────────────────────────────────────────────────
@@ -558,6 +563,15 @@ export default function Stocks({ stocks, allStocks, products, pendingTransfers, 
                                 </button>
                             ))}
                         </div>
+                    )}
+
+                    {/* Active out-of-stock filter — set via deep link from Home's card */}
+                    {outOfStockOnly && (
+                        <button onClick={() => setOutOfStockOnly(false)}
+                            className="flex items-center gap-1.5 rounded-full border border-rose-500/30 bg-rose-500/10 px-3 py-1 text-xs font-semibold text-rose-400">
+                            {t('home.outOfStock')}
+                            <X className="h-3 w-3" />
+                        </button>
                     )}
 
                     {/* Rows */}

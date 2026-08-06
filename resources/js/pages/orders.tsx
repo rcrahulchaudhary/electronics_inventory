@@ -94,8 +94,13 @@ export default function Orders({ orders, outlets, flash }: Props) {
     const { t } = useTranslation();
     const { isSuperadmin } = useAuth();
 
+    // Deep-linked filters (e.g. from the Home dashboard cards) are seeded
+    // from the URL on first render: ?status=pending, ?payment_type=credit
+    const initialParams = useMemo(() => new URLSearchParams(window.location.search), []);
+
     const [search, setSearch]             = useState('');
-    const [statusFilter, setStatusFilter] = useState<string>('all');
+    const [statusFilter, setStatusFilter] = useState<string>(() => initialParams.get('status') ?? 'all');
+    const [paymentFilter, setPaymentFilter] = useState<string>(() => initialParams.get('payment_type') ?? '');
     const [outletFilter, setOutletFilter] = useState<number | ''>('');
     const [editingOrder, setEditingOrder] = useState<Order | null>(null);
     const [newStatus, setNewStatus]       = useState<string>('');
@@ -103,6 +108,7 @@ export default function Orders({ orders, outlets, flash }: Props) {
     const filtered = useMemo(() =>
         orders.filter(o => {
             const matchStatus = statusFilter === 'all' || o.status === statusFilter;
+            const matchPayment = !paymentFilter || o.payment_type === paymentFilter;
             const matchOutlet = !outletFilter ||
                 o.origin_outlet.id === outletFilter ||
                 o.destination_outlet.id === outletFilter;
@@ -115,9 +121,9 @@ export default function Orders({ orders, outlets, flash }: Props) {
                     i.product.brand.name.toLowerCase().includes(q)
                 ) ||
                 String(o.id).includes(q);
-            return matchStatus && matchOutlet && matchSearch;
+            return matchStatus && matchPayment && matchOutlet && matchSearch;
         }),
-    [orders, search, statusFilter, outletFilter]);
+    [orders, search, statusFilter, paymentFilter, outletFilter]);
     const { paged, page, totalPages, total, goTo } = usePagination(filtered, 10);
 
     const stats = useMemo(() => ({
@@ -204,6 +210,15 @@ export default function Orders({ orders, outlets, flash }: Props) {
                             </select>
                         )}
                     </div>
+
+                    {/* Active payment-type filter — set via deep link from Home's Credits card */}
+                    {paymentFilter && (
+                        <button onClick={() => setPaymentFilter('')}
+                            className="flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-xs font-semibold text-amber-400">
+                            {t('orderMgmt.paymentType')}: {t(`orderMgmt.${paymentFilter}`)}
+                            <X className="h-3 w-3" />
+                        </button>
+                    )}
                 </div>
 
                 {/* Order list */}

@@ -50,9 +50,14 @@ class StockController extends Controller
             });
         }
 
+        $allStocksQuery = Stock::select(['outlet_id', 'product_id']);
+        if (!$user->is_superadmin) {
+            $allStocksQuery->where('outlet_id', $user->outlet_id);
+        }
+
         return Inertia::render('stocks', [
             'stocks'           => $stocksQuery->orderBy('updated_at', 'desc')->get(),
-            'allStocks'        => Stock::select(['outlet_id', 'product_id'])->get(),
+            'allStocks'        => $allStocksQuery->get(),
             'pendingTransfers' => $transfersQuery->orderBy('created_at', 'desc')->get(),
             'products'    => Product::where('is_active', true)
                 ->with(['brand:id,name', 'category:id,name'])

@@ -81,7 +81,10 @@ class OrderController extends Controller
             'items.*.quantity'      => 'required|numeric|min:0.01',
         ]);
 
-        if (!$user->is_superadmin && (int) $data['origin_outlet_id'] !== $user->outlet_id) {
+        if (!$user->is_superadmin && (
+            (int) $data['origin_outlet_id'] !== $user->outlet_id ||
+            (int) $data['destination_outlet_id'] !== $user->outlet_id
+        )) {
             abort(403);
         }
 
