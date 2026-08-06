@@ -10,6 +10,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { QuickCreateModal } from '@/components/quick-create-modal';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import * as stocksRoute from '@/routes/stocks';
+import * as transfersRoute from '@/routes/stocks/transfers';
 import * as productsRoute from '@/routes/products';
 import * as brandsRoute from '@/routes/brands';
 import * as categoriesRoute from '@/routes/categories';
@@ -41,10 +42,21 @@ type SimpleProduct = { id: number; name: string; model_number: string | null; br
 type StockedPair   = { outlet_id: number; product_id: number };
 type StockAction   = 'directAdd' | 'transferStock';
 
+type PendingTransfer = {
+    id: number;
+    quantity: string;
+    product: SimpleProduct;
+    from_outlet: Outlet;
+    to_outlet: Outlet;
+    requested_by: { id: number; name: string };
+    created_at: string;
+};
+
 type Props = {
     stocks: StockEntry[];
     allStocks: StockedPair[];
     products: SimpleProduct[];
+    pendingTransfers: PendingTransfer[];
     brands: Brand[];
     categories: Category[];
     outlets: Outlet[];
@@ -122,7 +134,7 @@ function SectionHeading({ icon, label, badge }: { icon: string; label: string; b
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export default function Stocks({ stocks, allStocks, products, brands: initialBrands, categories: initialCategories, outlets, flash }: Props) {
+export default function Stocks({ stocks, allStocks, products, pendingTransfers, brands: initialBrands, categories: initialCategories, outlets, flash }: Props) {
     const { t } = useTranslation();
     const { isSuperadmin, outletId: userOutletId } = useAuth();
 
@@ -132,6 +144,7 @@ export default function Stocks({ stocks, allStocks, products, brands: initialBra
     const [editingStock, setEditingStock]         = useState<StockEntry | null>(null);
     const [editQty, setEditQty]                   = useState('');
     const [stockAction, setStockAction]           = useState<StockAction>('directAdd');
+    const [resolvingId, setResolvingId]           = useState<number | null>(null);
 
     // Local brand/category lists — extended when user quick-creates
     const [brands, setBrands]         = useState(initialBrands);
@@ -139,12 +152,10 @@ export default function Stocks({ stocks, allStocks, products, brands: initialBra
     const [quickCreate, setQuickCreate] = useState<'brand' | 'category' | null>(null);
 
     // ── Direct-add form state ──────────────────────────────────────────────
+    // Any product can be picked here — if it's already stocked at the chosen
+    // outlet, submitting adds to the existing quantity instead of creating a
+    // duplicate entry (see StockController::store).
     const [formOutletId, setFormOutletId] = useState<number | ''>(isSuperadmin ? '' : (userOutletId ?? ''));
-
-    const availableProducts = useMemo(() => {
-        if (!formOutletId) return products;
-        return products.filter(p => !allStocks.some(s => s.outlet_id === formOutletId && s.product_id === p.id));
-    }, [products, allStocks, formOutletId]);
 
     // ── Transfer form state ────────────────────────────────────────────────
     const [transferFromId, setTransferFromId] = useState<number | ''>(isSuperadmin ? '' : (userOutletId ?? ''));
@@ -213,6 +224,23 @@ export default function Stocks({ stocks, allStocks, products, brands: initialBra
                 transferForm.reset();
                 setTransferFromId(isSuperadmin ? '' : (userOutletId ?? ''));
             },
+        });
+    };
+
+    // ── Pending transfer actions ───────────────────────────────────────────
+    const handleAcceptTransfer = (id: number) => {
+        setResolvingId(id);
+        router.post(transfersRoute.accept(id).url, {}, {
+            preserveScroll: true,
+            onFinish: () => setResolvingId(null),
+        });
+    };
+
+    const handleRejectTransfer = (id: number) => {
+        setResolvingId(id);
+        router.post(transfersRoute.reject(id).url, {}, {
+            preserveScroll: true,
+            onFinish: () => setResolvingId(null),
         });
     };
 
@@ -302,7 +330,7 @@ export default function Stocks({ stocks, allStocks, products, brands: initialBra
 
                                 <ProductSelect
                                     label={t('stockMgmt.product') + ' *'}
-                                    products={availableProducts}
+                                    products={products}
                                     value={addForm.data.product_id}
                                     onChange={id => addForm.setData('product_id', id)}
                                     placeholder={t('stockMgmt.selectProduct')}
@@ -433,6 +461,61 @@ export default function Stocks({ stocks, allStocks, products, brands: initialBra
                         </>
                     )}
                 </div>
+
+                {/* Pending transfers */}
+                {pendingTransfers.length > 0 && (
+                    <div className="space-y-4 rounded-3xl border border-slate-800 bg-slate-900 p-6 shadow-xl">
+                        <SectionHeading icon="" label={t('stockMgmt.pendingTransfers')} badge={String(pendingTransfers.length)} />
+                        <div className="space-y-2">
+                            {pendingTransfers.map(pt => {
+                                const canAct = isSuperadmin || pt.to_outlet.id === userOutletId;
+                                const busy = resolvingId === pt.id;
+                                return (
+                                    <div key={pt.id} className="flex items-center justify-between gap-3 rounded-2xl border border-slate-800 bg-slate-950/60 p-4">
+                                        <div className="min-w-0 flex-1">
+                                            <p className="truncate text-sm font-semibold text-white">
+                                                {pt.product.brand.name} {pt.product.name}
+                                            </p>
+                                            <p className="text-xs text-slate-500">
+                                                {pt.product.category.name} • {Number(pt.quantity).toLocaleString()} {t('stock.pcs')}
+                                            </p>
+                                            <p className="mt-1 text-xs font-medium text-indigo-400">
+                                                {pt.from_outlet.code} → {pt.to_outlet.code}
+                                            </p>
+                                            <p className="text-[10px] text-slate-600">
+                                                {t('stockMgmt.requestedBy')}: {pt.requested_by.name}
+                                            </p>
+                                        </div>
+                                        {canAct ? (
+                                            <div className="flex shrink-0 items-center gap-2">
+                                                <button
+                                                    type="button"
+                                                    disabled={busy}
+                                                    onClick={() => handleAcceptTransfer(pt.id)}
+                                                    className="rounded-xl bg-emerald-600 px-3 py-2 text-[10px] font-bold text-white transition-all hover:bg-emerald-700 active:scale-[0.98] disabled:opacity-60"
+                                                >
+                                                    {busy ? t('stockMgmt.accepting') : t('stockMgmt.accept')}
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    disabled={busy}
+                                                    onClick={() => handleRejectTransfer(pt.id)}
+                                                    className="rounded-xl bg-rose-600/90 px-3 py-2 text-[10px] font-bold text-white transition-all hover:bg-rose-700 active:scale-[0.98] disabled:opacity-60"
+                                                >
+                                                    {busy ? t('stockMgmt.rejecting') : t('stockMgmt.reject')}
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <span className="shrink-0 rounded-xl border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[10px] font-semibold text-amber-400">
+                                                {t('stockMgmt.awaitingAcceptance')}
+                                            </span>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                )}
 
                 {/* Stock ledger */}
                 <div className="space-y-5 rounded-3xl border border-slate-800 bg-slate-900 p-6 shadow-xl">

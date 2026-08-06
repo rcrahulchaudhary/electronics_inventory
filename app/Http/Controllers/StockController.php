@@ -7,6 +7,7 @@ use App\Models\Category;
 use App\Models\Outlet;
 use App\Models\Product;
 use App\Models\Stock;
+use App\Models\StockTransfer;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
@@ -33,9 +34,26 @@ class StockController extends Controller
             $stocksQuery->where('outlet_id', $user->outlet_id);
         }
 
+        $transfersQuery = StockTransfer::with([
+            'product:id,name,model_number,brand_id,category_id',
+            'product.brand:id,name',
+            'product.category:id,name',
+            'fromOutlet:id,name,code',
+            'toOutlet:id,name,code',
+            'requestedBy:id,name',
+        ])->where('status', 'pending');
+
+        if (!$user->is_superadmin) {
+            $transfersQuery->where(function ($q) use ($user) {
+                $q->where('from_outlet_id', $user->outlet_id)
+                    ->orWhere('to_outlet_id', $user->outlet_id);
+            });
+        }
+
         return Inertia::render('stocks', [
-            'stocks'      => $stocksQuery->orderBy('updated_at', 'desc')->get(),
-            'allStocks'   => Stock::select(['outlet_id', 'product_id'])->get(),
+            'stocks'           => $stocksQuery->orderBy('updated_at', 'desc')->get(),
+            'allStocks'        => Stock::select(['outlet_id', 'product_id'])->get(),
+            'pendingTransfers' => $transfersQuery->orderBy('created_at', 'desc')->get(),
             'products'    => Product::where('is_active', true)
                 ->with(['brand:id,name', 'category:id,name'])
                 ->orderBy('name')
@@ -60,18 +78,29 @@ class StockController extends Controller
         $outletId = $user->is_superadmin ? $data['outlet_id'] : $user->outlet_id;
 
         DB::transaction(function () use ($data, $outletId) {
-            // Upsert outlet_product pivot (so cost is tracked)
-            $product = Product::find($data['product_id']);
-            $product->outlets()->syncWithoutDetaching([
-                $outletId => ['initial_qty' => $data['quantity'], 'cost' => $data['cost']],
-            ]);
+            $stock = Stock::where('outlet_id', $outletId)->where('product_id', $data['product_id'])->first();
 
-            // Create stock record (quantity = initial_qty since this is a fresh entry)
-            Stock::create([
-                'outlet_id'  => $outletId,
-                'product_id' => $data['product_id'],
-                'quantity'   => $data['quantity'],
-            ]);
+            if ($stock) {
+                // Product already stocked at this outlet — this is a restock,
+                // so add to the existing quantity rather than overwrite it.
+                $stock->increment('quantity', $data['quantity']);
+
+                // Keep the latest cost, but leave the original initial_qty
+                // pivot value alone — it's historical record, not a running total.
+                $product = Product::find($data['product_id']);
+                $product->outlets()->syncWithoutDetaching([$outletId => ['cost' => $data['cost']]]);
+            } else {
+                $product = Product::find($data['product_id']);
+                $product->outlets()->syncWithoutDetaching([
+                    $outletId => ['initial_qty' => $data['quantity'], 'cost' => $data['cost']],
+                ]);
+
+                Stock::create([
+                    'outlet_id'  => $outletId,
+                    'product_id' => $data['product_id'],
+                    'quantity'   => $data['quantity'],
+                ]);
+            }
         });
 
         return redirect()->route('stocks.index')->with('success', 'Stock entry added.');
@@ -88,36 +117,150 @@ class StockController extends Controller
             'quantity'       => 'required|numeric|min:0.01',
         ]);
 
-        // Outlet users can only transfer from their own outlet
+        // Outlet users can only request transfers from their own outlet
         if (!$user->is_superadmin && (int) $data['from_outlet_id'] !== $user->outlet_id) {
             abort(403);
         }
 
-        $from = Stock::where('outlet_id', $data['from_outlet_id'])
-            ->where('product_id', $data['product_id'])
-            ->firstOrFail();
+        $error = null;
 
-        if ($from->quantity < $data['quantity']) {
-            return back()->withErrors(['quantity' => 'Not enough stock in source outlet.']);
-        }
+        DB::transaction(function () use ($data, $user, &$error) {
+            $from = Stock::where('outlet_id', $data['from_outlet_id'])
+                ->where('product_id', $data['product_id'])
+                ->lockForUpdate()
+                ->first();
 
-        DB::transaction(function () use ($data, $from) {
-            $from->decrement('quantity', $data['quantity']);
+            if (!$from) {
+                $error = 'This product has no stock in the source outlet.';
 
-            $to = Stock::firstOrCreate(
-                ['outlet_id' => $data['to_outlet_id'], 'product_id' => $data['product_id']],
-                ['quantity'  => 0]
-            );
-            $to->increment('quantity', $data['quantity']);
+                return;
+            }
 
-            // Ensure pivot exists for destination outlet
-            $product = \App\Models\Product::find($data['product_id']);
-            $product->outlets()->syncWithoutDetaching([
-                $data['to_outlet_id'] => ['initial_qty' => 0, 'cost' => 0],
+            // Stock already promised to other pending transfers out of this
+            // outlet can't be promised again, even though it hasn't actually
+            // been deducted yet.
+            $alreadyPending = StockTransfer::where('from_outlet_id', $data['from_outlet_id'])
+                ->where('product_id', $data['product_id'])
+                ->where('status', 'pending')
+                ->lockForUpdate()
+                ->sum('quantity');
+
+            if (($from->quantity - $alreadyPending) < $data['quantity']) {
+                $error = 'Not enough available stock in source outlet (some may already be reserved by other pending transfers).';
+
+                return;
+            }
+
+            // No stock is moved yet — the destination outlet must accept the
+            // transfer first. Only the request itself is recorded here.
+            StockTransfer::create([
+                'product_id'     => $data['product_id'],
+                'from_outlet_id' => $data['from_outlet_id'],
+                'to_outlet_id'   => $data['to_outlet_id'],
+                'quantity'       => $data['quantity'],
+                'status'         => 'pending',
+                'requested_by'   => $user->id,
             ]);
         });
 
-        return redirect()->route('stocks.index')->with('success', 'Stock transferred successfully.');
+        if ($error) {
+            return back()->withErrors(['quantity' => $error]);
+        }
+
+        return redirect()->route('stocks.index')->with('success', 'Transfer request sent — awaiting acceptance from the destination outlet.');
+    }
+
+    public function acceptTransfer(Request $request, StockTransfer $transfer)
+    {
+        $user = $request->user();
+
+        if (!$user->is_superadmin && $transfer->to_outlet_id !== $user->outlet_id) {
+            abort(403);
+        }
+
+        $error = null;
+
+        DB::transaction(function () use ($transfer, $user, &$error) {
+            // Re-fetch and lock so a concurrent accept/reject on the same
+            // transfer can't both go through.
+            $locked = StockTransfer::where('id', $transfer->id)->lockForUpdate()->first();
+
+            if ($locked->status !== 'pending') {
+                $error = 'This transfer has already been resolved.';
+
+                return;
+            }
+
+            $from = Stock::where('outlet_id', $locked->from_outlet_id)
+                ->where('product_id', $locked->product_id)
+                ->lockForUpdate()
+                ->first();
+
+            if (!$from || $from->quantity < $locked->quantity) {
+                $error = 'Not enough stock in the source outlet to complete this transfer.';
+
+                return;
+            }
+
+            $from->decrement('quantity', $locked->quantity);
+
+            $to = Stock::firstOrCreate(
+                ['outlet_id' => $locked->to_outlet_id, 'product_id' => $locked->product_id],
+                ['quantity'  => 0]
+            );
+            $to->increment('quantity', $locked->quantity);
+
+            // Ensure pivot exists for destination outlet
+            $product = Product::find($locked->product_id);
+            $product->outlets()->syncWithoutDetaching([
+                $locked->to_outlet_id => ['initial_qty' => 0, 'cost' => 0],
+            ]);
+
+            $locked->update([
+                'status'      => 'accepted',
+                'resolved_by' => $user->id,
+                'resolved_at' => now(),
+            ]);
+        });
+
+        if ($error) {
+            return back()->withErrors(['transfer' => $error]);
+        }
+
+        return redirect()->route('stocks.index')->with('success', 'Transfer accepted — stock updated.');
+    }
+
+    public function rejectTransfer(Request $request, StockTransfer $transfer)
+    {
+        $user = $request->user();
+
+        if (!$user->is_superadmin && $transfer->to_outlet_id !== $user->outlet_id) {
+            abort(403);
+        }
+
+        $error = null;
+
+        DB::transaction(function () use ($transfer, $user, &$error) {
+            $locked = StockTransfer::where('id', $transfer->id)->lockForUpdate()->first();
+
+            if ($locked->status !== 'pending') {
+                $error = 'This transfer has already been resolved.';
+
+                return;
+            }
+
+            $locked->update([
+                'status'      => 'rejected',
+                'resolved_by' => $user->id,
+                'resolved_at' => now(),
+            ]);
+        });
+
+        if ($error) {
+            return back()->withErrors(['transfer' => $error]);
+        }
+
+        return redirect()->route('stocks.index')->with('success', 'Transfer request rejected.');
     }
 
     public function update(Request $request, Stock $stock)

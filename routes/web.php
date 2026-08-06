@@ -23,6 +23,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::resource('brands',     BrandController::class)->only(['index', 'store', 'update', 'destroy']);
     Route::resource('products',   ProductController::class)->only(['index', 'store', 'update', 'destroy']);
     Route::post('stocks/transfer', [StockController::class, 'transfer'])->name('stocks.transfer');
+    Route::post('stocks/transfers/{transfer}/accept', [StockController::class, 'acceptTransfer'])->name('stocks.transfers.accept');
+    Route::post('stocks/transfers/{transfer}/reject', [StockController::class, 'rejectTransfer'])->name('stocks.transfers.reject');
     Route::resource('stocks',     StockController::class)->only(['index', 'store', 'update']);
     Route::resource('orders',     OrderController::class)->only(['index', 'store', 'update']);
 });
