@@ -200,6 +200,9 @@ export default function Stocks({ stocks, allStocks, products, pendingTransfers, 
     const handleAdd = (e: React.FormEvent) => {
         e.preventDefault();
         addForm.post(stocksRoute.store().url, {
+            preserveScroll: true,
+            preserveState: true,
+            only: ['stocks', 'allStocks', 'flash'],
             onSuccess: () => addForm.reset(),
         });
     };
@@ -220,6 +223,9 @@ export default function Stocks({ stocks, allStocks, products, pendingTransfers, 
     const handleTransfer = (e: React.FormEvent) => {
         e.preventDefault();
         transferForm.post(stocksRoute.transfer().url, {
+            preserveScroll: true,
+            preserveState: true,
+            only: ['stocks', 'allStocks', 'pendingTransfers', 'flash'],
             onSuccess: () => {
                 transferForm.reset();
                 setTransferFromId(isSuperadmin ? '' : (userOutletId ?? ''));
@@ -232,6 +238,8 @@ export default function Stocks({ stocks, allStocks, products, pendingTransfers, 
         setResolvingId(id);
         router.post(transfersRoute.accept(id).url, {}, {
             preserveScroll: true,
+            preserveState: true,
+            only: ['stocks', 'allStocks', 'pendingTransfers', 'flash'],
             onFinish: () => setResolvingId(null),
         });
     };
@@ -240,6 +248,8 @@ export default function Stocks({ stocks, allStocks, products, pendingTransfers, 
         setResolvingId(id);
         router.post(transfersRoute.reject(id).url, {}, {
             preserveScroll: true,
+            preserveState: true,
+            only: ['pendingTransfers', 'flash'],
             onFinish: () => setResolvingId(null),
         });
     };

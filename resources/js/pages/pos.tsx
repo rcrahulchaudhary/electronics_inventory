@@ -1,16 +1,17 @@
 import { Head, Link, router } from '@inertiajs/react';
-import { useRef, useMemo, useState } from 'react';
+import { useRef, useMemo, useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
     ArrowLeft, CheckCircle2, ChevronDown, ChevronUp,
-    Image, Minus, Moon, Package, Plus, Search,
-    ShoppingCart, Store, Sun, Trash2, User, X, Zap,
+    Image, Mail, Minus, Moon, Package, Plus, Printer, Search,
+    Share2, ShoppingCart, Store, Sun, Trash2, User, X, Zap,
 } from 'lucide-react';
 import LanguageSwitcher from '@/components/language-switcher';
 import { useAuth } from '@/hooks/use-auth';
 import { useAppearance } from '@/hooks/use-appearance';
 import { initializeTheme } from '@/hooks/use-appearance';
 import * as ordersRoute from '@/routes/orders';
+import BillCard, { type BillOrder } from '@/components/bill-card';
 
 initializeTheme();
 
@@ -18,7 +19,8 @@ initializeTheme();
 
 type Outlet   = { id: number; name: string; code: string };
 type Brand    = { id: number; name: string };
-type Product  = { id: number; name: string; model_number: string | null; brand: Brand; image_url: string | null };
+type Category = { id: number; name: string };
+type Product  = { id: number; name: string; model_number: string | null; brand: Brand; category: Category; image_url: string | null };
 type StockRow = { id: number; outlet_id: number; product_id: number; quantity: string; product: Product };
 
 type CartItem = {
@@ -29,10 +31,12 @@ type CartItem = {
     warrantyPreview: string | null;
 };
 
+type CompletedOrder = BillOrder & { bill_url: string };
+
 type Props = {
     outlets: Outlet[];
     stocks:  StockRow[];
-    flash?:  { success?: string };
+    flash?:  { success?: string; completedOrder?: CompletedOrder | null };
 };
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -57,12 +61,20 @@ export default function Pos({ outlets, stocks, flash }: Props) {
     const { t } = useTranslation();
     const { isSuperadmin, outletId: userOutletId } = useAuth();
     const { resolvedAppearance, updateAppearance }  = useAppearance();
+    const storeName = t('common.appName');
 
     const defaultOutletId = isSuperadmin ? '' : (userOutletId ?? '');
 
     // ── Outlet state ──────────────────────────────────────────────────────────
     const [destOutletId, setDestOutletId] = useState<number | ''>(defaultOutletId);
     const [originOutletId, setOriginOutletId] = useState<number | ''>(defaultOutletId);
+
+    // ── Success / bill screen ─────────────────────────────────────────────────
+    const [completedOrder, setCompletedOrder] = useState<CompletedOrder | null>(null);
+
+    useEffect(() => {
+        if (flash?.completedOrder) setCompletedOrder(flash.completedOrder);
+    }, [flash?.completedOrder]);
 
     // ── Product browser ───────────────────────────────────────────────────────
     const [search, setSearch] = useState('');
@@ -95,6 +107,7 @@ export default function Pos({ outlets, stocks, flash }: Props) {
         return outletStocks.filter(s =>
             s.product.name.toLowerCase().includes(q) ||
             s.product.brand.name.toLowerCase().includes(q) ||
+            s.product.category.name.toLowerCase().includes(q) ||
             (s.product.model_number ?? '').toLowerCase().includes(q)
         );
     }, [outletStocks, search]);
@@ -193,10 +206,11 @@ export default function Pos({ outlets, stocks, flash }: Props) {
 
         router.post(ordersRoute.store().url, fd, {
             forceFormData: true,
+            preserveScroll: true,
+            preserveState: true,
+            only: ['stocks', 'flash'],
             onSuccess: () => {
                 setCart([]);
-                setDestOutletId(defaultOutletId);
-                setOriginOutletId(defaultOutletId);
                 setPaymentType('cash');
                 setStatus('pending');
                 setCustomerName(''); setCustomerMobile(''); setCustomerAddress('');
@@ -205,6 +219,31 @@ export default function Pos({ outlets, stocks, flash }: Props) {
             },
             onFinish: () => setProcessing(false),
         });
+    };
+
+    const startNewSale = () => setCompletedOrder(null);
+
+    const [linkCopied, setLinkCopied] = useState(false);
+
+    const handlePrintBill = () => window.print();
+
+    const handleShareBill = async (order: CompletedOrder) => {
+        const text = `${t('orderMgmt.billNumber')} ${order.bill_number} — ${fmt(order.grand_total)}`;
+        if (navigator.share) {
+            try { await navigator.share({ title: order.bill_number, text, url: order.bill_url }); } catch { /* user cancelled */ }
+        } else {
+            await navigator.clipboard.writeText(order.bill_url);
+            setLinkCopied(true);
+            setTimeout(() => setLinkCopied(false), 2500);
+        }
+    };
+
+    const handleEmailBill = (order: CompletedOrder) => {
+        const subject = encodeURIComponent(`${t('orderMgmt.billNumber')} ${order.bill_number}`);
+        const body = encodeURIComponent(
+            `${t('orderMgmt.totalPayable')}: ${fmt(order.grand_total)}\n${order.bill_url}`
+        );
+        window.location.href = `mailto:?subject=${subject}&body=${body}`;
     };
 
     const destOutlet = outlets.find(o => o.id === destOutletId);
@@ -216,6 +255,48 @@ export default function Pos({ outlets, stocks, flash }: Props) {
     const addToCartAndSwitch = (s: StockRow) => {
         addToCart(s);
     };
+
+    // ── Render: initial outlet-selection screen (superadmin, multi-outlet) ─────
+    if (isSuperadmin && !destOutletId) {
+        return (
+            <div className="flex h-screen flex-col overflow-y-auto bg-slate-950 text-slate-100 antialiased">
+                <Head title={t('tabs.pos')} />
+
+                <header className="flex h-12 shrink-0 items-center justify-between border-b border-slate-800 bg-slate-900 px-3">
+                    <div className="flex items-center gap-2">
+                        <Link href="/home" className="flex h-7 w-7 items-center justify-center rounded-lg border border-slate-700 text-slate-400 hover:bg-slate-800 hover:text-white transition-colors">
+                            <ArrowLeft className="h-3.5 w-3.5" />
+                        </Link>
+                        <span className="text-sm font-black text-white">{t('tabs.pos')}</span>
+                    </div>
+                    <LanguageSwitcher />
+                </header>
+
+                <div className="mx-auto flex w-full max-w-md flex-1 flex-col items-center justify-center gap-6 p-6 text-center">
+                    <div className="flex h-16 w-16 items-center justify-center rounded-3xl border border-slate-800 bg-slate-900">
+                        <Store className="h-7 w-7 text-slate-500" />
+                    </div>
+                    <div>
+                        <p className="text-lg font-black text-white">{t('common.selectOutletFirst')}</p>
+                        <p className="mt-1 text-xs text-slate-500">{t('orderMgmt.stockDeductNote')}</p>
+                    </div>
+                    <div className="w-full space-y-2">
+                        {outlets.map(o => (
+                            <button
+                                key={o.id}
+                                type="button"
+                                onClick={() => { setDestOutletId(o.id); setOriginOutletId(o.id); }}
+                                className="flex w-full items-center justify-between rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3.5 text-left transition-colors hover:border-indigo-500/50 hover:bg-slate-800/80"
+                            >
+                                <span className="font-bold text-white">{o.name}</span>
+                                <span className="rounded-full bg-slate-800 px-2 py-0.5 text-[10px] font-bold text-slate-400">{o.code}</span>
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     // ── Render ────────────────────────────────────────────────────────────────
     return (
@@ -340,7 +421,7 @@ export default function Pos({ outlets, stocks, flash }: Props) {
                                             </div>
 
                                             <p className={`text-[10px] font-bold uppercase tracking-wide ${inCart ? 'text-indigo-400' : 'text-slate-500'}`}>
-                                                {s.product.brand.name}
+                                                {s.product.brand.name} → {s.product.category.name}
                                             </p>
                                             <p className={`mt-0.5 text-sm font-bold leading-snug ${inCart ? 'text-slate-100' : 'text-slate-200'}`}>
                                                 {s.product.name}
@@ -413,7 +494,7 @@ export default function Pos({ outlets, stocks, flash }: Props) {
                                                 )}
                                             </div>
                                             <div className="min-w-0 flex-1">
-                                                <p className="text-[10px] font-bold uppercase text-indigo-400">{c.stockRow.product.brand.name}</p>
+                                                <p className="text-[10px] font-bold uppercase text-indigo-400">{c.stockRow.product.brand.name} → {c.stockRow.product.category.name}</p>
                                                 <p className="truncate text-sm font-black text-white">{c.stockRow.product.name}</p>
                                                 {c.stockRow.product.model_number && (
                                                     <p className="text-[10px] text-slate-500">{c.stockRow.product.model_number}</p>
@@ -737,6 +818,60 @@ export default function Pos({ outlets, stocks, flash }: Props) {
                     </button>
                 </div>
             </div>
+
+            {/* ── Success / Bill modal ────────────────────────────────────── */}
+            {completedOrder && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/60 p-4 backdrop-blur-sm print:items-start print:bg-[#ffffff] print:p-0 print:backdrop-blur-none">
+                    <div className="relative my-auto w-full max-w-md space-y-5 print:my-0">
+                        <button
+                            type="button"
+                            onClick={startNewSale}
+                            className="absolute -right-1 -top-1 flex h-8 w-8 items-center justify-center rounded-full bg-slate-800 text-slate-400 shadow-lg transition-colors hover:bg-slate-700 hover:text-white print:hidden"
+                        >
+                            <X className="h-4 w-4" />
+                        </button>
+
+                        <div className="flex flex-col items-center gap-3 text-center print:hidden">
+                            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500/15">
+                                <CheckCircle2 className="h-9 w-9 text-emerald-400" />
+                            </div>
+                            <div>
+                                <p className="text-lg font-black text-white">{t('orderMgmt.saleComplete')}</p>
+                                <p className="text-xs text-slate-400">{t('orderMgmt.saleCompleteSub')}</p>
+                            </div>
+                        </div>
+
+                        <BillCard order={completedOrder} storeName={storeName} />
+
+                        {/* Actions */}
+                        <div className="grid grid-cols-3 gap-2 print:hidden">
+                            <button type="button" onClick={handlePrintBill}
+                                className="flex flex-col items-center gap-1.5 rounded-2xl border border-slate-800 bg-slate-900 py-3 text-[10px] font-bold text-slate-300 transition-colors hover:border-indigo-500/50 hover:text-indigo-400">
+                                <Printer className="h-4 w-4" /> {t('orderMgmt.print')}
+                            </button>
+                            <button type="button" onClick={() => handleShareBill(completedOrder)}
+                                className="flex flex-col items-center gap-1.5 rounded-2xl border border-slate-800 bg-slate-900 py-3 text-[10px] font-bold text-slate-300 transition-colors hover:border-indigo-500/50 hover:text-indigo-400">
+                                <Share2 className="h-4 w-4" /> {t('orderMgmt.share')}
+                            </button>
+                            <button type="button" onClick={() => handleEmailBill(completedOrder)}
+                                className="flex flex-col items-center gap-1.5 rounded-2xl border border-slate-800 bg-slate-900 py-3 text-[10px] font-bold text-slate-300 transition-colors hover:border-indigo-500/50 hover:text-indigo-400">
+                                <Mail className="h-4 w-4" /> {t('orderMgmt.email')}
+                            </button>
+                        </div>
+
+                        {linkCopied && (
+                            <p className="text-center text-[10px] font-semibold text-emerald-400 print:hidden">
+                                {t('orderMgmt.viewShareableBill')}
+                            </p>
+                        )}
+
+                        <button type="button" onClick={startNewSale}
+                            className="w-full rounded-2xl bg-indigo-600 py-3.5 text-sm font-black text-white shadow-lg shadow-indigo-600/25 transition-all hover:bg-indigo-500 active:scale-[0.98] print:hidden">
+                            {t('orderMgmt.newSale')}
+                        </button>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

@@ -9,6 +9,7 @@ use App\Models\Payment;
 use App\Models\Stock;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\URL;
 use Inertia\Inertia;
 
 class OrderController extends Controller
@@ -18,8 +19,9 @@ class OrderController extends Controller
         $user = $request->user();
 
         $stocksQuery = Stock::with([
-            'product:id,name,model_number,brand_id,image',
+            'product:id,name,model_number,brand_id,category_id,image',
             'product.brand:id,name',
+            'product.category:id,name',
         ])->where('quantity', '>', 0);
 
         if (!$user->is_superadmin) {
@@ -98,7 +100,9 @@ class OrderController extends Controller
             }
         }
 
-        DB::transaction(function () use ($data, $destOutletId, $request) {
+        $order = null;
+
+        DB::transaction(function () use ($data, $destOutletId, $request, &$order) {
             $order = Order::create([
                 'origin_outlet_id'      => $data['origin_outlet_id'],
                 'destination_outlet_id' => $destOutletId,
@@ -154,7 +158,48 @@ class OrderController extends Controller
             }
         });
 
+        $order->load(['items.product:id,name,model_number', 'destinationOutlet:id,name,code,address']);
+
+        session()->flash('completedOrder', [
+            ...$this->billPayload($order),
+            'bill_url' => URL::signedRoute('orders.bill', ['order' => $order->id]),
+        ]);
+
         return redirect()->route('pos')->with('success', 'Order created successfully.');
+    }
+
+    public function showBill(Order $order)
+    {
+        $order->load(['items.product:id,name,model_number', 'destinationOutlet:id,name,code,address']);
+
+        return Inertia::render('bill', [
+            'order' => $this->billPayload($order),
+        ]);
+    }
+
+    private function billPayload(Order $order): array
+    {
+        return [
+            'id'              => $order->id,
+            'bill_number'     => $order->bill_number,
+            'customer_name'   => $order->customer_name,
+            'customer_mobile' => $order->customer_mobile,
+            'payment_type'    => $order->payment_type,
+            'created_at'      => $order->created_at->toIso8601String(),
+            'outlet'          => [
+                'name'    => $order->destinationOutlet->name,
+                'address' => $order->destinationOutlet->address,
+            ],
+            'items' => $order->items->map(fn ($item) => [
+                'product_name' => $item->product->name,
+                'model_number' => $item->product->model_number,
+                'price'        => $item->price,
+                'quantity'     => $item->quantity,
+                'total'        => round($item->price * $item->quantity, 2),
+            ]),
+            'quantity_total' => $order->items->sum('quantity'),
+            'grand_total'    => round($order->items->sum(fn ($item) => $item->price * $item->quantity), 2),
+        ];
     }
 
     public function update(Request $request, Order $order)

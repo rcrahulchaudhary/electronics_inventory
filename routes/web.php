@@ -13,6 +13,11 @@ use Illuminate\Support\Facades\Route;
 
 Route::redirect('/', '/login');
 
+// Public, signed bill link — no login required, shareable with customers.
+Route::get('bill/{order}', [OrderController::class, 'showBill'])
+    ->middleware('signed')
+    ->name('orders.bill');
+
 // All authenticated users
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('home', [HomeController::class, 'index'])->name('home');

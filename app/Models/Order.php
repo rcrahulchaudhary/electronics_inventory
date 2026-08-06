@@ -34,4 +34,9 @@ class Order extends Model
     {
         return $this->hasOne(Payment::class);
     }
+
+    public function getBillNumberAttribute(): string
+    {
+        return 'INV-' . str_pad((string) $this->id, 6, '0', STR_PAD_LEFT);
+    }
 }
