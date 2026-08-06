@@ -8,6 +8,7 @@ import Pagination from '@/components/pagination';
 import { usePagination } from '@/hooks/use-pagination';
 import { useAuth } from '@/hooks/use-auth';
 import { QuickCreateModal } from '@/components/quick-create-modal';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import * as stocksRoute from '@/routes/stocks';
 import * as productsRoute from '@/routes/products';
 import * as brandsRoute from '@/routes/brands';
@@ -36,7 +37,7 @@ type StockEntry = {
     product: StockProduct;
 };
 
-type SimpleProduct = { id: number; name: string; model_number: string | null };
+type SimpleProduct = { id: number; name: string; model_number: string | null; brand: Brand; category: Category };
 type StockedPair   = { outlet_id: number; product_id: number };
 type StockAction   = 'directAdd' | 'transferStock';
 
@@ -68,6 +69,44 @@ function FormSelect({ label, children, className = '', ...props }: { label: stri
             <select className={`w-full rounded-2xl border border-slate-800 bg-slate-950 px-3.5 py-2.5 text-sm text-slate-200 outline-none transition-all focus:border-indigo-500/50 focus:ring-2 focus:ring-indigo-500/20 disabled:cursor-not-allowed disabled:opacity-50 ${className}`} {...props}>
                 {children}
             </select>
+        </div>
+    );
+}
+
+function ProductSelect({
+    label, products, value, onChange, placeholder, disabled,
+}: {
+    label: string;
+    products: SimpleProduct[];
+    value: number | '';
+    onChange: (id: number) => void;
+    placeholder: string;
+    disabled?: boolean;
+}) {
+    const selected = products.find(p => p.id === value);
+
+    return (
+        <div>
+            <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-500">{label}</label>
+            <Select value={value ? String(value) : ''} onValueChange={v => onChange(Number(v))} disabled={disabled}>
+                <SelectTrigger className="w-full">
+                    <SelectValue placeholder={placeholder}>
+                        {selected ? `${selected.name}${selected.model_number ? ` (${selected.model_number})` : ''}` : undefined}
+                    </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                    {products.map(p => (
+                        <SelectItem key={p.id} value={String(p.id)}>
+                            <span className="flex flex-col gap-0.5 py-0.5">
+                                <span>{p.name}{p.model_number ? ` (${p.model_number})` : ''}</span>
+                                <span className="text-[10px] font-medium text-slate-500">
+                                    {p.brand.name} → {p.category.name}
+                                </span>
+                            </span>
+                        </SelectItem>
+                    ))}
+                </SelectContent>
+            </Select>
         </div>
     );
 }
@@ -261,17 +300,13 @@ export default function Stocks({ stocks, allStocks, products, brands: initialBra
                                     </FormSelect>
                                 )}
 
-                                <FormSelect
+                                <ProductSelect
                                     label={t('stockMgmt.product') + ' *'}
+                                    products={availableProducts}
                                     value={addForm.data.product_id}
-                                    onChange={e => addForm.setData('product_id', Number(e.target.value))}
-                                    required
-                                >
-                                    <option value="">{t('stockMgmt.selectProduct')}</option>
-                                    {availableProducts.map(p => (
-                                        <option key={p.id} value={p.id}>{p.name}{p.model_number ? ` (${p.model_number})` : ''}</option>
-                                    ))}
-                                </FormSelect>
+                                    onChange={id => addForm.setData('product_id', id)}
+                                    placeholder={t('stockMgmt.selectProduct')}
+                                />
 
                                 <div className="flex items-center gap-2">
                                     <span className="text-[10px] text-slate-600">{t('stockMgmt.orAddProduct')}</span>
@@ -345,24 +380,20 @@ export default function Stocks({ stocks, allStocks, products, brands: initialBra
                                 )}
 
                                 {/* Product - only those stocked at from-outlet */}
-                                <FormSelect
+                                <ProductSelect
                                     label={t('stock.transferItem') + ' *'}
+                                    products={transferProducts}
                                     value={transferForm.data.product_id}
-                                    onChange={e => transferForm.setData('product_id', Number(e.target.value))}
+                                    onChange={id => transferForm.setData('product_id', id)}
                                     disabled={!transferFromId}
-                                    required
-                                >
-                                    <option value="">
-                                        {!transferFromId
+                                    placeholder={
+                                        !transferFromId
                                             ? t('stockMgmt.filterByOutlet') + '...'
                                             : transferProducts.length === 0
                                                 ? t('stockMgmt.noProductsToTransfer')
-                                                : t('stockMgmt.selectProduct')}
-                                    </option>
-                                    {transferProducts.map(p => (
-                                        <option key={p.id} value={p.id}>{p.name}{p.model_number ? ` (${p.model_number})` : ''}</option>
-                                    ))}
-                                </FormSelect>
+                                                : t('stockMgmt.selectProduct')
+                                    }
+                                />
 
                                 {/* To outlet */}
                                 <FormSelect

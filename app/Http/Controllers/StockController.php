@@ -36,7 +36,10 @@ class StockController extends Controller
         return Inertia::render('stocks', [
             'stocks'      => $stocksQuery->orderBy('updated_at', 'desc')->get(),
             'allStocks'   => Stock::select(['outlet_id', 'product_id'])->get(),
-            'products'    => Product::where('is_active', true)->orderBy('name')->get(['id', 'name', 'model_number']),
+            'products'    => Product::where('is_active', true)
+                ->with(['brand:id,name', 'category:id,name'])
+                ->orderBy('name')
+                ->get(['id', 'name', 'model_number', 'brand_id', 'category_id']),
             'brands'      => Brand::where('is_active', true)->orderBy('name')->get(['id', 'name']),
             'categories'  => Category::where('is_active', true)->orderBy('name')->get(['id', 'name']),
             'outlets'     => Outlet::orderBy('name')->get(['id', 'name', 'code']),
