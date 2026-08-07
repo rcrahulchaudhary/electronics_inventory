@@ -15,6 +15,8 @@ class Order extends Model
         'payment_type', 'status',
     ];
 
+    protected $appends = ['bill_number'];
+
     public function originOutlet(): BelongsTo
     {
         return $this->belongsTo(Outlet::class, 'origin_outlet_id');

@@ -6,6 +6,7 @@ use App\Http\Controllers\HomeController;
 use App\Http\Controllers\MaintenanceController;
 use App\Http\Controllers\OrderController;
 use App\Http\Controllers\ProductController;
+use App\Http\Controllers\ReportController;
 use App\Http\Controllers\StockController;
 use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\OutletController;
@@ -35,6 +36,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::resource('orders',     OrderController::class)->only(['index', 'store', 'update']);
     Route::post('cash-transfers/{cashTransfer}/accept', [CashTransferController::class, 'accept'])->name('cash-transfers.accept');
     Route::resource('cash-transfers', CashTransferController::class)->only(['index', 'store']);
+    Route::get('reports', [ReportController::class, 'index'])->name('reports.index');
+    Route::post('reports/credit/{payment}/settle', [ReportController::class, 'settleCredit'])->name('reports.credit.settle');
 });
 
 // Superadmin only

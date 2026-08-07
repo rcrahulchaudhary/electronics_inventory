@@ -221,6 +221,6 @@ class OrderController extends Controller
 
         $order->update($data);
 
-        return redirect()->route('orders.index')->with('success', 'Order status updated.');
+        return back()->with('success', 'Order status updated.');
     }
 }

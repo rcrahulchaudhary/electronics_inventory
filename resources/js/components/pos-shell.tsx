@@ -2,7 +2,7 @@ import { Link } from '@inertiajs/react';
 import { type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-    ArrowLeft, Banknote, Home, Menu, Power, ShoppingCart, Warehouse, Wrench,
+    ArrowLeft, Banknote, BarChart3, Home, Menu, Power, ShoppingCart, Warehouse, Wrench,
     Store, Tag, Award, Package, ClipboardList, Settings, Sun, Moon, Users,
 } from 'lucide-react';
 import LanguageSwitcher from '@/components/language-switcher';
@@ -37,6 +37,7 @@ const MENU_SUB_ITEMS = (t: (k: string) => string, isSuperadmin: boolean) =>
         { href: '/products',        icon: Package,       label: () => t('menu.productManagement') },
         { href: '/orders',          icon: ClipboardList, label: () => t('menu.orderManagement') },
         { href: '/cash-transfers',  icon: Banknote,      label: () => t('menu.cashTransfers') },
+        { href: '/reports',        icon: BarChart3,     label: () => t('menu.reports') },
         { href: '/settings/profile',icon: Settings,      label: () => t('settings.title') },
     ].filter(item => !('superadminOnly' in item && item.superadminOnly && !isSuperadmin));
 
