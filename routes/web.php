@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\BrandController;
+use App\Http\Controllers\CashTransferController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\MaintenanceController;
 use App\Http\Controllers\OrderController;
@@ -32,6 +33,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('stocks/transfers/{transfer}/reject', [StockController::class, 'rejectTransfer'])->name('stocks.transfers.reject');
     Route::resource('stocks',     StockController::class)->only(['index', 'store', 'update']);
     Route::resource('orders',     OrderController::class)->only(['index', 'store', 'update']);
+    Route::post('cash-transfers/{cashTransfer}/accept', [CashTransferController::class, 'accept'])->name('cash-transfers.accept');
+    Route::resource('cash-transfers', CashTransferController::class)->only(['index', 'store']);
 });
 
 // Superadmin only

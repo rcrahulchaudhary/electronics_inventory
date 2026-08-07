@@ -2,7 +2,7 @@ import { Head, Link } from '@inertiajs/react';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/hooks/use-auth';
 import PosShell from '@/components/pos-shell';
-import { Store, Tag, Award, Package, ClipboardList, Settings, ChevronRight, Users } from 'lucide-react';
+import { Store, Tag, Award, Package, ClipboardList, Settings, ChevronRight, Users, Banknote } from 'lucide-react';
 
 type MenuCard = {
     href: string;
@@ -75,6 +75,15 @@ export default function Menu() {
             color: 'text-teal-400',
             bgColor: 'bg-teal-500/10',
             borderColor: 'border-teal-500/20 hover:border-teal-500/50',
+        },
+        {
+            href: '/cash-transfers',
+            icon: Banknote,
+            label: t('menu.cashTransfers'),
+            description: t('menu.cashTransfersDesc'),
+            color: 'text-emerald-400',
+            bgColor: 'bg-emerald-500/10',
+            borderColor: 'border-emerald-500/20 hover:border-emerald-500/50',
         },
         {
             href: '/settings/profile',
