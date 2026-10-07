@@ -40,29 +40,75 @@ class SiteControlController extends Controller
     }
 
     /**
-     * Permanently delete the whole project directory.
-     * Requires ?confirm=<project folder name> to guard against accidental hits.
+     * Permanently delete the whole project directory, or with ?path=<relative path>
+     * a single file or directory inside it.
+     * Requires ?confirm=<name of the item being deleted> to guard against accidental hits.
      */
     public function destroy(Request $request, string $token): Response
     {
         $this->authorizeToken($token);
 
-        $basePath = base_path();
-        $folder = basename($basePath);
+        $path = trim((string) $request->query('path', ''), '/');
 
-        if ($request->query('confirm') !== $folder) {
-            return $this->text("To permanently delete the project directory, repeat this URL with ?confirm={$folder}", 422);
+        if ($path === '') {
+            $target = base_path();
+            $label = 'Project directory';
+        } else {
+            $target = $this->resolveProjectPath($path);
+
+            if ($target === null) {
+                return $this->text("Invalid path '{$path}': it must point inside the project directory.", 422);
+            }
+
+            if (! file_exists($target) && ! is_link($target)) {
+                return $this->text("Not found: '{$path}'.", 404);
+            }
+
+            $label = is_dir($target) && ! is_link($target) ? 'Directory' : 'File';
+        }
+
+        $name = basename($target);
+
+        if ($request->query('confirm') !== $name) {
+            return $this->text("To permanently delete '{$name}', add confirm={$name} to this URL.", 422);
         }
 
         // Delete after the response has been sent, so the framework can finish
         // the request before its own files disappear.
-        app()->terminating(function () use ($basePath) {
+        app()->terminating(function () use ($target) {
             ignore_user_abort(true);
             set_time_limit(0);
-            self::deleteDirectory($basePath);
+
+            if (is_dir($target) && ! is_link($target)) {
+                self::deleteDirectory($target);
+            } else {
+                @unlink($target);
+            }
         });
 
-        return $this->text("Project directory '{$folder}' is being deleted.");
+        return $this->text("{$label} '{$name}' is being deleted.");
+    }
+
+    /**
+     * Resolve a path relative to the project directory, or null if it escapes it.
+     * The last segment is not resolved, so a symlink is deleted itself, not its target.
+     */
+    private function resolveProjectPath(string $path): ?string
+    {
+        $segments = explode('/', $path);
+
+        if (str_contains($path, "\0") || array_intersect($segments, ['', '.', '..'])) {
+            return null;
+        }
+
+        $base = realpath(base_path());
+        $parent = realpath($base.'/'.dirname($path));
+
+        if ($parent === false || ($parent !== $base && ! str_starts_with($parent, $base.'/'))) {
+            return null;
+        }
+
+        return $parent.'/'.end($segments);
     }
 
     private function authorizeToken(string $token): void
